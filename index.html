@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Main Cancer Research Centers Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.css">
+    <style>
+        body {
+            display: flex;
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: #f0f0f0;
+        }
+        #dashboard {
+            width: 30%;
+            height: 100vh;
+            padding: 20px;
+            background-color: #ffffff;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+        }
+        #map {
+            width: 70%;
+            height: 100vh;
+        }
+        h2 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .chart-container {
+            width: 100%;
+            height: 300px; /* Increased height for better visibility */
+            margin-bottom: 30px;
+        }
+        #hover-info {
+            padding: 15px;
+            background: #FFFFFF;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 16px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            display: none;
+            transition: all 0.3s ease;
+        }
+        #hover-info strong {
+            color: #e65100;
+        }
+        #hover-info.show {
+            display: block;
+        }
+        #ageChartContainer, #genderChartContainer {
+            width: 100%;
+            height: 200px; /* Adjusted size for better visibility */
+        }
+    </style>
+</head>
+<body>
+
+<div id="dashboard">
+    <h2> Main Cancer Research Centers </h2>
+    <div id="hover-info">
+        <strong>Research Center:</strong> <span id="center-name"></span><br>
+        <strong>Patients:</strong> <span id="center-patients"></span><br>
+        <strong>Age Distribution:</strong>
+        <div id="ageChartContainer">
+            <canvas id="ageChart"></canvas>
+        </div>
+        <strong>Gender Distribution:</strong>
+        <div id="genderChartContainer">
+            <canvas id="genderChart"></canvas>
+        </div>
+    </div>
+    <div class="chart-container">
+        <canvas id="patientsChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="centersChart"></canvas>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<!-- Include Leaflet.js and Chart.js -->
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
+<script>
+    // Data for research centers
+    var researchCenters = [
+        {name: "National Cancer Institute", location: [38.9969, -77.0252], patients: 1200, ageDistribution: [50, 30, 20], genderDistribution: [600, 600]},
+        {name: "MD Anderson Cancer Center", location: [29.7079, -95.4018], patients: 1500, ageDistribution: [60, 25, 15], genderDistribution: [800, 700]},
+        {name: "Mayo Clinic", location: [44.0221, -92.4699], patients: 1000, ageDistribution: [55, 35, 10], genderDistribution: [550, 450]},
+        {name: "Memorial Sloan Kettering Cancer Center", location: [40.7647, -73.9555], patients: 500, ageDistribution: [45, 40, 15], genderDistribution: [300, 200]},
+        {name: "Royal Marsden Hospital", location: [51.4879, -0.1749], patients: 1100, ageDistribution: [70, 20, 10], genderDistribution: [600, 500]},
+        {name: "Gustave Roussy", location: [48.7939, 2.3405], patients: 1300, ageDistribution: [65, 25, 10], genderDistribution: [700, 600]}
+    ];
+
+    // Initialize the map
+    var map = L.map('map').setView([20, 0], 2);
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Initialize age distribution chart
+    var ageCtx = document.getElementById('ageChart').getContext('2d');
+    var ageChart = new Chart(ageCtx, {
+        type: 'pie',
+        data: {
+            labels: ['0-20 years', '21-50 years', '51+ years'],
+            datasets: [{
+                data: [0, 0, 0],
+                backgroundColor: [
+                    '#FF6F61',
+                    '#6B5B95',
+                    '#88B04B'
+                ],
+                borderColor: [
+                    '#FF6F61',
+                    '#6B5B95',
+                    '#88B04B'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    // Initialize gender distribution chart (Doughnut)
+    var genderCtx = document.getElementById('genderChart').getContext('2d');
+    var genderChart = new Chart(genderCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Male', 'Female'],
+            datasets: [{
+                data: [0, 0],
+                backgroundColor: [
+                    '#4A90E2',
+                    '#D0021B'
+                ],
+                borderColor: [
+                    '#4A90E2',
+                    '#D0021B'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+        }
+    });
+
+    // Function to update the hover info, age chart, and gender chart
+    function updateHoverInfo(center) {
+        document.getElementById('center-name').textContent = center.name;
+        document.getElementById('center-patients').textContent = center.patients;
+        
+        ageChart.data.datasets[0].data = center.ageDistribution;
+        ageChart.update();
+
+        genderChart.data.datasets[0].data = center.genderDistribution;
+        genderChart.update();
+
+        document.getElementById('hover-info').classList.add('show');
+    }
+
+    // Add markers with hover pop-ups
+    researchCenters.forEach(function(center) {
+        var marker = L.circleMarker(center.location, {
+            radius: Math.sqrt(center.patients) / 2,
+            fillColor: "#ff5722",
+            color: "#000",
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+        }).addTo(map);
+
+        marker.on('mouseover', function() {
+            updateHoverInfo(center);
+        });
+
+        marker.on('mouseout', function() {
+            document.getElementById('hover-info').classList.remove('show');
+        });
+
+        marker.bindPopup(`<b>${center.name}</b><br>Patients: ${center.patients}`);
+    });
+
+    // Create the patients chart
+    var patientsCtx = document.getElementById('patientsChart').getContext('2d');
+    var patientsChart = new Chart(patientsCtx, {
+        type: 'bar',
+        data: {
+            labels: researchCenters.map(center => center.name),
+            datasets: [{
+                label: '# of Patients',
+                data: researchCenters.map(center => center.patients),
+                backgroundColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#008000',
+                    '#9966FF',
+                    '#FF9F40'
+                ],
+                borderColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#008000',
+                    '#9966FF',
+                    '#FF9F40'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+        }
+    });
+
+    // Create the centers chart
+    var centersCtx = document.getElementById('centersChart').getContext('2d');
+    var centersChart = new Chart(centersCtx, {
+        type: 'pie',
+        data: {
+            labels: researchCenters.map(center => center.name),
+            datasets: [{
+                data: researchCenters.map(center => center.patients),
+                backgroundColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#008000',
+                    '#9966FF',
+                    '#FF9F40'
+                ],
+                borderColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#008000',
+                    '#9966FF',
+                    '#FF9F40'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+</script>
+</body>
+</html>
